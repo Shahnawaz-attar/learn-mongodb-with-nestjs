@@ -737,4 +737,419 @@ export class UserService {
       },
     ]);
   }
+
+  //to use Mongoose's $replaceRoot and $arrayToObject for reshaping documents
+  async replaceRootAndArrayToObject(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $replaceRoot: {
+          newRoot: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$$ROOT' },
+                as: 'field',
+                in: {
+                  k: { $concat: ['value_', '$$field.k'] },
+                  v: '$$field.v',
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+  }
+
+  // to use Mongoose's $function for executing a JavaScript function during aggregation
+  async executeCustomFunction(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $project: {
+          customField: {
+            $function: {
+              body: function (a, b) {
+                return a + b;
+              },
+              args: [10, 20],
+              lang: 'js',
+            },
+          },
+        },
+      },
+    ]);
+  }
+
+  // to use Mongoose's $lookup with $let, $eq, and $ifNull for advanced data retrieval within a pipeline
+  async lookupWithLetEqIfNull(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $lookup: {
+          from: 'address',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$userId', '$$userId'] }],
+                },
+              },
+            },
+          ],
+          as: 'primaryAddress',
+        },
+      },
+      {
+        $project: {
+          primaryAddress: {
+            $ifNull: [{ $arrayElemAt: ['$primaryAddress', 0] }, {}],
+          },
+        },
+      },
+    ]);
+  }
+
+  //to use Mongoose's $lookup with $unwind, $group, and $replaceRoot for denormalizing nested arrays
+  async lookupWithUnwindGroupReplaceRoot(userId: string): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $match: { _id: new mongoose.Types.ObjectId(userId) },
+      },
+      {
+        $lookup: {
+          from: 'skills',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'skills',
+        },
+      },
+      {
+        $unwind: '$skills',
+      },
+      {
+        $group: {
+          _id: '$_id',
+          firstName: { $first: '$firstName' },
+          lastName: { $first: '$lastName' },
+          skills: { $push: '$skills' },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ['$$ROOT', { skills: '$skills' }],
+          },
+        },
+      },
+    ]);
+  }
+
+  // not working
+  //to use Mongoose's $function with $map, $filter, and $reduce for custom array transformations
+  async functionWithMapFilterReduce(): Promise<any[]> {
+    try {
+      return this.userModel.aggregate([
+        {
+          $project: {
+            modifiedArray: {
+              $function: {
+                body: function (skills: string[]) {
+                  return skills
+                    .map((skill) => skill.toUpperCase())
+                    .filter((skill) => skill.includes('JS'))
+                    .reduce((acc, skill) => {
+                      acc.push({ modifiedSkill: skill, value: true });
+                      return acc;
+                    }, []);
+                },
+                args: ['$skills'],
+                lang: 'js',
+              },
+            },
+          },
+        },
+      ]);
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Internal Server Error');
+    }
+  }
+
+  //to use Mongoose's $facet with $bucket and $sortByCount for comprehensive data analysis
+  async facetWithBucketAndSortByCount(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $facet: {
+          ageDistribution: [
+            {
+              $bucket: {
+                groupBy: '$age',
+                boundaries: [20, 30, 40],
+                default: 'Other',
+                output: {
+                  count: { $sum: 1 },
+                },
+              },
+            },
+          ],
+          skillDistribution: [
+            { $unwind: '$skills' },
+            { $sortByCount: '$skills' },
+          ],
+        },
+      },
+      {
+        $project: {
+          combinedResult: {
+            $concatArrays: ['$ageDistribution', '$skillDistribution'],
+          },
+        },
+      },
+    ]);
+  }
+
+  //to use Mongoose's $expr with $allElementsTrue and $map for checking if all elements in an array match a condition
+  async exprWithAllElementsTrue(): Promise<User[]> {
+    return this.userModel.find({
+      $expr: {
+        $allElementsTrue: {
+          $map: {
+            input: ['JavaScript', 'React', 'Node.js', 'php', 'data analyst'], // Skills you're looking for
+            as: 'requiredSkill',
+            in: { $in: ['$$requiredSkill', '$skills'] }, // Check if each required skill is in the user's skills
+          },
+        },
+      },
+    });
+  }
+
+  // to use Mongoose's $bucket with $sum and $cond for conditional bucketing of data
+  async bucketWithSumAndCond(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $bucket: {
+          groupBy: '$age', // Group users by their 'age' field
+          boundaries: [20, 30, 40], // Define the age boundaries for the buckets
+          default: 'Other', // Default bucket if age doesn't fall into defined boundaries
+          output: {
+            count: { $sum: 1 }, // Count the number of users in each bucket
+            totalSkills: {
+              $sum: {
+                $cond: {
+                  // Conditional expression
+                  if: { $gte: ['$skills.length', 2] }, // If the user has 2 or more skills
+                  then: '$skills.length', // Sum the total number of skills
+                  else: 0, // If not, set the totalSkills to 0
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+  }
+
+  //to use Mongoose's $lookup with $unwind, $group, and $project for denormalizing nested arrays and calculating averages
+  async lookupWithUnwindGroupProject(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $lookup: {
+          from: 'skills', // Lookup the 'skills' collection
+          localField: '_id', // Match the local field '_id' with the foreign field 'userId'
+          foreignField: 'userId',
+          as: 'skills', // Store the matched skills in the 'skills' array
+        },
+      },
+      {
+        $unwind: '$skills', // Unwind the 'skills' array, creating a new document for each skill
+      },
+      {
+        $group: {
+          _id: '$_id', // Group by user ID
+          firstName: { $first: '$firstName' }, // Take the first 'firstName' in the group
+          lastName: { $first: '$lastName' }, // Take the first 'lastName' in the group
+          averageSkillExperience: { $avg: '$age' }, // Calculate the average of the 'age' field in the group
+        },
+      },
+      {
+        $project: {
+          _id: 1, // Include the user ID in the result
+          fullName: { $concat: ['$firstName', ' ', '$lastName'] }, // Concatenate 'firstName' and 'lastName' as 'fullName'
+          averageSkillExperience: 1, // Include the calculated average skill experience in the result
+        },
+      },
+    ]);
+  }
+
+  //use Mongoose's $facet with $bucketAuto, $sortByCount, and $limit for dynamic data analysis and ranking
+  async facetWithBucketAutoSortByCountLimit(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $facet: {
+          ageDistribution: [{ $bucketAuto: { groupBy: '$age', buckets: 5 } }],
+          topSkills: [
+            { $unwind: '$skills' },
+            { $sortByCount: '$skills' },
+            { $limit: 3 },
+          ],
+        },
+      },
+      {
+        $project: {
+          combinedResult: {
+            $concatArrays: ['$ageDistribution', '$topSkills'],
+          },
+        },
+      },
+    ]);
+  }
+
+  //to use Mongoose's $facet with $lookup, $unwind, and $group for parallel processing and data enrichment
+  async facetWithLookupUnwindGroup(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $facet: {
+          enrichedData: [
+            {
+              $lookup: {
+                from: 'enrichments',
+                localField: 'username',
+                foreignField: 'username',
+                as: 'enrichment',
+              },
+            },
+            { $unwind: '$enrichment' },
+            {
+              $group: {
+                _id: '$_id',
+                username: { $first: '$username' },
+                enrichedField: { $first: '$enrichment.enrichedField' },
+              },
+            },
+          ],
+          ageDistribution: [{ $bucketAuto: { groupBy: '$age', buckets: 5 } }],
+        },
+      },
+      {
+        $project: {
+          combinedResult: {
+            $concatArrays: ['$enrichedData', '$ageDistribution'],
+          },
+        },
+      },
+    ]);
+  }
+
+  // to use Mongoose's $lookup with $addFields, $slice, and $reduce for array transformations during data retrieval?
+  async lookupWithAddFieldsSliceReduce(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'orders',
+        },
+      },
+      {
+        $addFields: {
+          latestOrders: {
+            $slice: [
+              {
+                $reduce: {
+                  input: '$orders',
+                  initialValue: { latestDate: new Date(0), latestOrders: [] },
+                  in: {
+                    $cond: {
+                      if: { $gt: ['$$this.date', '$$value.latestDate'] },
+                      then: {
+                        latestDate: '$$this.date',
+                        latestOrders: ['$$this'],
+                      },
+                      else: {
+                        latestDate: '$$value.latestDate',
+                        latestOrders: {
+                          $concatArrays: ['$$value.latestOrders', ['$$this']],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              5,
+            ],
+          },
+        },
+      },
+    ]);
+  }
+
+  //to use Mongoose's $lookup with $unwind, $group, and $project for denormalizing nested arrays and calculating statistical measures?
+  async lookupWithUnwindGroupProjectStatistics(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $lookup: {
+          from: 'scores',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'scores',
+        },
+      },
+      {
+        $unwind: '$scores',
+      },
+      {
+        $group: {
+          _id: '$_id',
+          firstName: { $first: '$firstName' },
+          lastName: { $first: '$lastName' },
+          averageScore: { $avg: '$scores.score' },
+          maxScore: { $max: '$scores.score' },
+          minScore: { $min: '$scores.score' },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          fullName: { $concat: ['$firstName', ' ', '$lastName'] },
+          averageScore: 1,
+          maxScore: 1,
+          minScore: 1,
+        },
+      },
+    ]);
+  }
+
+  // to use Mongoose's $lookup with $unwind, $group, and $addFields for denormalizing nested arrays and calculating weighted sums?
+  async lookupWithUnwindGroupAddFieldsWeightedSum(): Promise<any[]> {
+    return this.userModel.aggregate([
+      {
+        $lookup: {
+          from: 'skills',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'skills',
+        },
+      },
+      {
+        $unwind: '$skills',
+      },
+      {
+        $group: {
+          _id: '$_id',
+          firstName: { $first: '$firstName' },
+          lastName: { $first: '$lastName' },
+          totalWeightedSum: {
+            $sum: {
+              $multiply: ['$skills.experience', '$skills.weight'],
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          fullName: { $concat: ['$firstName', ' ', '$lastName'] },
+        },
+      },
+    ]);
+  }
 }

@@ -317,6 +317,58 @@ export class UserController {
     return this.userService.bucketAndSumByAgeRange();
   }
 
+  @Get('replace-root-and-array-to-object')
+  async replaceRootAndArrayToObject(): Promise<any[]> {
+    return this.userService.replaceRootAndArrayToObject();
+  }
+
+  @Get('execute-custom-function')
+  async executeCustomFunction(): Promise<any[]> {
+    return this.userService.executeCustomFunction();
+  }
+
+  @Get('lookup-with-let-eq-if-null')
+  async lookupWithLetEqIfNull(): Promise<any[]> {
+    return this.userService.lookupWithLetEqIfNull();
+  }
+
+  @Get('lookup-unwind-group-replace-root/:userId')
+  async lookupWithUnwindGroupReplaceRoot(
+    @Param('userId') userId: string,
+  ): Promise<any[]> {
+    return this.userService.lookupWithUnwindGroupReplaceRoot(userId);
+  }
+
+  @Get('function-with-map-filter-reduce')
+  async functionWithMapFilterReduce(): Promise<any[]> {
+    return this.userService.functionWithMapFilterReduce();
+  }
+
+  @Get('expr-with-all-elements-true')
+  async exprWithAllElementsTrue(): Promise<User[]> {
+    return this.userService.exprWithAllElementsTrue();
+  }
+
+  @Get('bucket-with-sum-and-cond')
+  async bucketWithSumAndCond(): Promise<any[]> {
+    return this.userService.bucketWithSumAndCond();
+  }
+
+  @Get('facet-with-bucket-and-sort-by-count')
+  async facetWithBucketAndSortByCount(): Promise<any[]> {
+    return this.userService.facetWithBucketAndSortByCount();
+  }
+
+  @Get('lookup-unwind-group-project')
+  async lookupWithUnwindGroupProject(): Promise<any[]> {
+    return this.userService.lookupWithUnwindGroupProject();
+  }
+
+  @Get('facet-bucket-auto-sort-limit')
+  async facetWithBucketAutoSortByCountLimit(): Promise<any[]> {
+    return this.userService.facetWithBucketAutoSortByCountLimit();
+  }
+
   @Patch(':userId/rename-field')
   async renameFieldInUser(
     @Param('userId') userId: string,
