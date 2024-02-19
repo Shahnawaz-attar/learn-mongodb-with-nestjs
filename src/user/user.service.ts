@@ -12,6 +12,7 @@ export class UserService {
   async getAllUsers() {
     return this.userModel.find();
   }
+  
 
   async getOne(id) {
     return this.userModel.findById(id);
